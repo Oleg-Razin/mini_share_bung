@@ -1,28 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentUser } from '@/lib/auth-helpers';
 import type { PostWithUser } from '@/types/post';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import type { User } from '@supabase/supabase-js';
 
 export default function DashboardPage() {
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
 
-  useEffect(() => {
-    checkUser();
-    fetchPosts();
-  }, []);
-
-  const checkUser = async () => {
+  const checkUser = useCallback(async () => {
     const { user } = await getCurrentUser();
     setUser(user);
-  };
+    if (!user) {
+      router.push('/login');
+    }
+  }, [router]);
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('posts')
@@ -39,7 +41,32 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const checkUserAndFetchData = useCallback(async () => {
+    await checkUser();
+    await fetchPosts();
+  }, [checkUser, fetchPosts]);
+
+  useEffect(() => {
+    checkUserAndFetchData();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        router.push('/login');
+      } else if (event === 'SIGNED_IN' && session.user) {
+        await checkUser();
+        await fetchPosts();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router, checkUserAndFetchData, checkUser, fetchPosts]);
+
+
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -90,9 +117,11 @@ export default function DashboardPage() {
               className="group overflow-hidden rounded-lg border bg-card transition-all hover:shadow-lg"
             >
               <div className="aspect-square overflow-hidden">
-                <img
+                <Image
                   src={post.image_url}
                   alt={post.title}
+                  width={400}
+                  height={400}
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                 />
               </div>
