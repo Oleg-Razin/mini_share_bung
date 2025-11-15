@@ -165,8 +165,8 @@ export default function PostPage() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       <div className="mb-4">
-        <Link href="/dashboard">
-          <Button variant="ghost">← Back to Gallery</Button>
+        <Link href="/projects">
+          <Button variant="ghost">← Back to Projects</Button>
         </Link>
       </div>
 

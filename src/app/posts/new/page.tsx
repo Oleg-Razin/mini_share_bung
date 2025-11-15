@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { getCurrentUser } from '@/lib/auth-helpers';
+import { getCurrentUser, ensureUserExists } from '@/lib/auth-helpers';
 import type { PostInsert } from '@/types/post';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,6 +62,15 @@ export default function NewPostPage() {
         .from('artworks')
         .getPublicUrl(fileName);
 
+      // Ensure user profile exists before creating post
+      console.log('Ensuring user exists for:', user.id, user.email);
+      const userResult = await ensureUserExists(user.id, user.email);
+      
+      if (!userResult.success) {
+        console.error('Failed to ensure user exists:', userResult.error);
+        throw new Error('Could not create user profile');
+      }
+
       // Create post
       const postData: PostInsert = {
         user_id: user.id,
@@ -70,11 +79,17 @@ export default function NewPostPage() {
         image_url: publicUrl,
       };
 
+      console.log('Creating post with data:', postData);
+      console.log('Current user:', user);
+
       const { data: newPost, error: postError } = await (supabase
         .from('posts')
         .insert as any)(postData).select().single();
 
-      if (postError) throw postError;
+      if (postError) {
+        console.error('Post creation error:', postError);
+        throw postError;
+      }
 
       router.push(`/posts/${newPost.id}`);
     } catch (err) {
@@ -95,8 +110,8 @@ export default function NewPostPage() {
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8">
       <div className="mb-4">
-        <Link href="/dashboard">
-          <Button variant="ghost">← Back to Gallery</Button>
+        <Link href="/projects">
+          <Button variant="ghost">← Back to Projects</Button>
         </Link>
       </div>
 

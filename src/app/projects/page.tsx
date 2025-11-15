@@ -1,0 +1,160 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
+import { supabase } from '@/lib/supabaseClient';
+import { getCurrentUser } from '@/lib/auth-helpers';
+import type { PostWithUser } from '@/types/post';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import type { User } from '@supabase/supabase-js';
+
+export default function ProjectsPage() {
+  const [posts, setPosts] = useState<PostWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+
+  const checkUser = useCallback(async () => {
+    try {
+      const { user } = await getCurrentUser();
+      setUser(user);
+      // Allow anonymous viewing - don't redirect to login
+    } catch (error) {
+      console.error('Error checking user:', error);
+    }
+  }, []);
+
+  const fetchPosts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('posts')
+        .select(`
+          *,
+          user:users(username, avatar_url)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPosts(data as PostWithUser[]);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+      throw error; // Re-throw to be caught by loadData
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          checkUser(),
+          fetchPosts()
+        ]);
+      } catch (error) {
+        console.error('Error loading projects data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null); // Just update user state, don't redirect
+      } else if (event === 'SIGNED_IN' && session.user) {
+        await loadData();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [checkUser, fetchPosts]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    // Stay on the same page after sign out
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+          <p className="text-muted-foreground">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <header className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Projects</h1>
+          <p className="text-muted-foreground mt-2">Discover and share amazing projects</p>
+        </div>
+        <div className="flex gap-4">
+          {user ? (
+            <>
+              <Link href="/posts/new">
+                <Button>Share Project</Button>
+              </Link>
+              <Button variant="outline" onClick={handleSignOut}>
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button>Sign In</Button>
+              </Link>
+              <Link href="/signup">
+                <Button variant="outline">Sign Up</Button>
+              </Link>
+            </>
+          )}
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {posts.length === 0 ? (
+          <div className="col-span-full text-center py-12">
+            <p className="text-muted-foreground">No projects yet. Be the first to share your project!</p>
+          </div>
+        ) : (
+          posts.map((post) => (
+            <Link
+              key={post.id}
+              href={`/posts/${post.id}`}
+              className="group overflow-hidden rounded-lg border bg-card transition-all hover:shadow-lg"
+            >
+              <div className="aspect-square overflow-hidden">
+                <Image
+                  src={post.image_url}
+                  alt={post.title}
+                  width={400}
+                  height={400}
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold line-clamp-1">{post.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                  {post.description}
+                </p>
+                {post.user && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    by {post.user.username || 'Anonymous'}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

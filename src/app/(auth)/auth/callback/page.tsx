@@ -21,6 +21,13 @@ export default function AuthCallbackPage() {
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
 
+        // If there's no access token in the hash, check if user accessed this page directly
+        if (!accessToken && (window.location.hash === '#' || window.location.hash === '')) {
+          setStatus('No authentication data found. Redirecting to home...');
+          setTimeout(() => router.push('/'), 2000);
+          return;
+        }
+
         if (accessToken) {
           setStatus('Setting up session...');
           
@@ -40,7 +47,7 @@ export default function AuthCallbackPage() {
             setStatus('Redirecting...');
             // Clean the URL and redirect
             window.history.replaceState({}, document.title, '/auth/callback');
-            router.push('/dashboard');
+            router.push('/');
             return;
           }
         }
@@ -62,7 +69,7 @@ export default function AuthCallbackPage() {
           await ensureUserExists(session.user.id, session.user.email);
           
           setStatus('Redirecting...');
-          router.push('/dashboard');
+          router.push('/');
         } else if (isMounted) {
           // No session, redirect to login
           setStatus('No authentication found');
@@ -87,8 +94,8 @@ export default function AuthCallbackPage() {
       if (event === 'SIGNED_IN' && session?.user) {
         setStatus('User authenticated, setting up profile...');
         await ensureUserExists(session.user.id, session.user.email);
-        setStatus('Redirecting to dashboard...');
-        router.push('/dashboard');
+        setStatus('Redirecting to home...');
+        router.push('/');
       } else if (event === 'SIGNED_OUT') {
         router.push('/login');
       }
