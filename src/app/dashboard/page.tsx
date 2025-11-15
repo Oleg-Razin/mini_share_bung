@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentUser } from '@/lib/auth-helpers';
@@ -14,15 +13,16 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
-  const router = useRouter();
 
   const checkUser = useCallback(async () => {
-    const { user } = await getCurrentUser();
-    setUser(user);
-    if (!user) {
-      router.push('/login');
+    try {
+      const { user } = await getCurrentUser();
+      setUser(user);
+      // Allow anonymous viewing - don't redirect to login
+    } catch (error) {
+      console.error('Error checking user:', error);
     }
-  }, [router]);
+  }, []);
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -38,45 +38,55 @@ export default function DashboardPage() {
       setPosts(data as PostWithUser[]);
     } catch (error) {
       console.error('Error fetching posts:', error);
-    } finally {
-      setLoading(false);
+      throw error; // Re-throw to be caught by checkUserAndFetchData
     }
   }, []);
 
-  const checkUserAndFetchData = useCallback(async () => {
-    await checkUser();
-    await fetchPosts();
-  }, [checkUser, fetchPosts]);
-
   useEffect(() => {
-    checkUserAndFetchData();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          checkUser(),
+          fetchPosts()
+        ]);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
-        router.push('/login');
+        setUser(null); // Just update user state, don't redirect
       } else if (event === 'SIGNED_IN' && session.user) {
-        await checkUser();
-        await fetchPosts();
+        await loadData();
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, checkUserAndFetchData, checkUser, fetchPosts]);
+  }, [checkUser, fetchPosts]);
 
 
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/login';
+    // Stay on the same page after sign out
   };
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Loading...</p>
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+          <p className="text-muted-foreground">Loading your feed...</p>
+        </div>
       </div>
     );
   }
@@ -86,7 +96,7 @@ export default function DashboardPage() {
       <header className="mb-8 flex items-center justify-between">
         <h1 className="text-3xl font-bold">mini_share</h1>
         <div className="flex gap-4">
-          {user && (
+          {user ? (
             <>
               <Link href="/posts/new">
                 <Button>Create Post</Button>
@@ -95,11 +105,15 @@ export default function DashboardPage() {
                 Sign Out
               </Button>
             </>
-          )}
-          {!user && (
-            <Link href="/login">
-              <Button>Sign In</Button>
-            </Link>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button>Sign In</Button>
+              </Link>
+              <Link href="/signup">
+                <Button variant="outline">Sign Up</Button>
+              </Link>
+            </>
           )}
         </div>
       </header>
