@@ -39,7 +39,7 @@ export default function AuthCallbackPage() {
             
             setStatus('Redirecting...');
             // Clean the URL and redirect
-            window.history.replaceState({}, document.title, '/callback');
+            window.history.replaceState({}, document.title, '/auth/callback');
             router.push('/dashboard');
             return;
           }

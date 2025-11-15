@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export async function middleware(req: NextRequest) {
-  // For now, just handle the callback route to ensure it's accessible
-  if (req.nextUrl.pathname === '/callback') {
+  // Handle the auth callback route to ensure it's accessible
+  if (req.nextUrl.pathname === '/auth/callback') {
     return NextResponse.next();
   }
 
